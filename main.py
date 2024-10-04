@@ -8,6 +8,7 @@ from fastapi.responses import PlainTextResponse,HTMLResponse
 from funasr import AutoModel
 from fastapi.staticfiles import StaticFiles
 import json
+import re
 
 app = FastAPI()
 
@@ -53,6 +54,16 @@ def format_timestamp(milliseconds):
     return f"{hours:02}:{minutes:02}:{seconds:02},{milliseconds:03}"
 
 def funasr_to_srt(data):
+    import re
+    def count_mixed_sentence_chars(sentence):
+      chinese_pattern = re.compile('[\u4e00-\u9fa5]')
+      english_pattern = re.compile('[a-zA-Z]+')
+      
+      chinese_count = len(chinese_pattern.findall(sentence))
+      english_count = len(english_pattern.findall(sentence))
+
+      return chinese_count + english_count
+ 
     text = data[0]['text']
     timestamps = data[0]['timestamp']
     punctuations = ".,。，!！?？、"
@@ -73,7 +84,8 @@ def funasr_to_srt(data):
             if len(sentence.strip())==0:
                 continue
             start=end
-            end+=len(sentence)
+          
+            end+=count_mixed_sentence_chars(sentence)
             first_char_time = timestamps[start][0]
             if end-1> len(timestamps):
                 last_char_time = timestamps[-1][1]
@@ -90,6 +102,37 @@ def funasr_to_srt(data):
 
     return ''.join(srt_data)
 
+def srt2lrc(srt_content):
+    def convert_time_to_lrc(time_str):
+    # 将SRT时间戳格式转换为LRC时间戳格式
+    # SRT格式: 00:00:20,000
+    # LRC格式: [mm:ss.ff]
+      parts = time_str.split(':')
+      minutes = parts[0]
+      seconds = parts[1]
+      milliseconds = parts[2].replace(',', '')
+      
+      return f"[{minutes.zfill(2)}:{seconds.zfill(2)}.{milliseconds[:2]}]"
+    # 正则表达式匹配SRT字幕的时间戳和文本
+    srt_pattern = re.compile(r'(\d+)\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n(.+?)(?=\n\n|\Z)', re.DOTALL)
+    
+    # 用于存储转换后的LRC歌词
+    lrc_content = ""
+    
+    # 遍历所有匹配项
+    for match in srt_pattern.finditer(srt_content):
+        # 获取时间戳和文本
+        start_time = match.group(2)
+        end_time = match.group(3)
+        text = match.group(4).strip()
+        
+        # 将SRT时间戳转换为LRC时间戳格式
+        lrc_start_time = convert_time_to_lrc(start_time)
+        
+        # 将文本和时间戳添加到LRC内容中
+        lrc_content += f"[{lrc_start_time}]{text}\n"
+    
+    return lrc_content
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -107,11 +150,13 @@ async def root():
         <input type="file" name="file" id="file">
         <input value="Upload" id="uploadBtn" name="uploadBtn" type="button" />
         <span id="message"></span>
-        <input value="Download" id="downloadBtn" name="downloadBtn" type="button" />
+        <input value="Download SRT" id="downloadBtn" name="downloadBtn" type="button" />
+        <input value="Download LRC" id="downloadLRCBtn" name="downloadLRCBtn" type="button" />
 
         <div style="display:block;width: 100%;height: 500px;">
             <textarea name="text" id="text" cols="30" rows="10" style="height: 100%;width: 49.5%;float:left"></textarea>
-            <textarea name="srt" id="srt" cols="30" rows="10" style="height: 100%;width: 49.5%;float:right" ></textarea>
+            <textarea name="srt" id="srt" cols="30" rows="10" style="height: 50%;width: 49.5%;float:right" ></textarea>
+            <textarea name="lrc" id="lrc" cols="30" rows="10" style="height: 50%;width: 49.5%;float:right" ></textarea>
         </div>
     </form>
 
@@ -165,6 +210,7 @@ async def root():
                     var result=response['result'][0];
                     $('#text').html(result['text']);
                     $('#srt').html(result['srt']);
+                    $('#lrc').html(result['lrc']);
                 },
                 error: function(xhr, status, error) {
                 $('#message').html('Processing Error');
@@ -177,6 +223,11 @@ async def root():
             var filename=$('#file').val();
             saveFile($('#srt').val(), changeFileExtension(filename));
         });
+        $('#downloadLrcBtn').click(function() {
+            var filename=$('#file').val();
+            saveFile($('#lrc').val(), changeFileExtension(filename));
+        });
+
     });
     </script>
 
@@ -212,6 +263,7 @@ async def asr(file: List[UploadFile] = File(...)):
 
         try:
             srt=funasr_to_srt(result)
+            result[0]['lrc']=srt2lrc(srt)
             result[0]['srt']=srt
         except:
             print('srt convert fail')
