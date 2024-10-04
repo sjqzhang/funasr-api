@@ -11,7 +11,7 @@ import json
 
 app = FastAPI()
 
-app.mount("/static", StaticFiles(directory="./static"), name="static")
+#app.mount("/static", StaticFiles(directory="./static"), name="static")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -44,6 +44,7 @@ async def save_upload_file(upload_file: UploadFile) -> str:
         return temp_file.name  # 返回临时文件路径
 
 
+
 def format_timestamp(milliseconds):
     # 将毫秒转换为SRT格式的时间戳
     seconds, milliseconds = divmod(milliseconds, 1000)
@@ -54,7 +55,7 @@ def format_timestamp(milliseconds):
 def funasr_to_srt(data):
     text = data[0]['text']
     timestamps = data[0]['timestamp']
-    punctuations = ".,。，!！"
+    punctuations = ".,。，!！?？、"
     sentences = []
     start_idx = 0
     for i, char in enumerate(text):
@@ -69,10 +70,16 @@ def funasr_to_srt(data):
     end=0
     for idx, sentence in enumerate(sentences):
         try:
+            if len(sentence.strip())==0:
+                continue
             start=end
             end+=len(sentence)
             first_char_time = timestamps[start][0]
-            last_char_time=timestamps[end-1][1]
+            if end-1> len(timestamps):
+                last_char_time = timestamps[-1][1]
+            else:
+                last_char_time=timestamps[end-1][1]
+            
         except IndexError:
             continue
 
@@ -82,6 +89,7 @@ def funasr_to_srt(data):
         srt_data.append(f"{idx+1}\n{start_time} --> {end_time}\n{sentence.strip()}\n\n")
 
     return ''.join(srt_data)
+
 
 
 @app.get("/", response_class=HTMLResponse)
