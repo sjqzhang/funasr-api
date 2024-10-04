@@ -87,7 +87,7 @@ def funasr_to_srt(data):
           
             end+=count_mixed_sentence_chars(sentence)
             first_char_time = timestamps[start][0]
-            if end-1> len(timestamps):
+            if end-1>= len(timestamps):
                 last_char_time = timestamps[-1][1]
             else:
                 last_char_time=timestamps[end-1][1]
