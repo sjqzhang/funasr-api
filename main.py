@@ -163,7 +163,7 @@ async def root():
     <script>
 
     $(document).ready(function() {
-        function changeFileExtension(filePath) {
+        function changeFileExtension(filePath,ext) {
             // 使用正则表达式分割路径和文件名
             var parts = filePath.split('\\\\');
             if (parts.length === 1) {
@@ -176,11 +176,11 @@ async def root():
             
             // 如果文件名没有扩展名，则直接添加 .srt
             if (fileNameParts.length === 1) {
-                return `${fileNameWithExtension}.srt`;
+                return `${fileNameWithExtension}.`+ext;
             }
             
             // 构建新的文件名，将扩展名替换为 .srt
-            const newFileName = `${fileNameParts.slice(0, -1).join('.')}.srt`;
+            const newFileName = `${fileNameParts.slice(0, -1).join('.')}.`+ext;
             
             return newFileName;
         }
@@ -221,11 +221,11 @@ async def root():
 
         $('#downloadBtn').click(function() {
             var filename=$('#file').val();
-            saveFile($('#srt').val(), changeFileExtension(filename));
+            saveFile($('#srt').val(), changeFileExtension(filename,'srt'));
         });
-        $('#downloadLrcBtn').click(function() {
+        $('#downloadLRCBtn').click(function() {
             var filename=$('#file').val();
-            saveFile($('#lrc').val(), changeFileExtension(filename));
+            saveFile($('#lrc').val(), changeFileExtension(filename,'lrc'));
         });
 
     });
