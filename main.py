@@ -12,6 +12,9 @@ import re
 
 app = FastAPI()
 
+
+app.mount(tempfile.gettempdir(), StaticFiles(directory=tempfile.gettempdir()), name="temp")
+
 #app.mount("/static", StaticFiles(directory="./static"), name="static")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -107,10 +110,10 @@ def srt2lrc(srt_content):
     # 将SRT时间戳格式转换为LRC时间戳格式
     # SRT格式: 00:00:20,000
     # LRC格式: [mm:ss.ff]
-      parts = time_str.split(':')
-      minutes = parts[0]
-      seconds = parts[1]
-      milliseconds = parts[2].replace(',', '')
+      parts = re.split(r'\:|\,',time_str)
+      minutes = parts[1]
+      seconds = parts[2]
+      milliseconds = parts[3]
       
       return f"[{minutes.zfill(2)}:{seconds.zfill(2)}.{milliseconds[:2]}]"
     # 正则表达式匹配SRT字幕的时间戳和文本
@@ -130,7 +133,7 @@ def srt2lrc(srt_content):
         lrc_start_time = convert_time_to_lrc(start_time)
         
         # 将文本和时间戳添加到LRC内容中
-        lrc_content += f"[{lrc_start_time}]{text}\n"
+        lrc_content += f"{lrc_start_time}{text}\n"
     
     return lrc_content
 
@@ -152,6 +155,10 @@ async def root():
         <span id="message"></span>
         <input value="Download SRT" id="downloadBtn" name="downloadBtn" type="button" />
         <input value="Download LRC" id="downloadLRCBtn" name="downloadLRCBtn" type="button" />
+        <audio id="audioPlayer" controls loop autoplay>
+  <source src="/Volumes/Data/Quark/100个话题英语/话题01-姓名和称呼.mp3"  type="audio/mpeg">
+  您的浏览器不支持 audio 元素。
+</audio> <span id="displayLrc"></span>
 
         <div style="display:block;width: 100%;height: 500px;">
             <textarea name="text" id="text" cols="30" rows="10" style="height: 100%;width: 49.5%;float:left"></textarea>
@@ -193,6 +200,40 @@ async def root():
             downloadLink[0].click();
             downloadLink.remove();
         }
+
+
+function parseLrc(lrc) {
+  var lyrics = lrc.split('\\n');
+  var lrcObj = {};
+  for (var i = 0; i < lyrics.length; i++) {
+    var lyric = decodeURIComponent(lyrics[i]);
+    var timeReg = /\\[\\d*:\\d*(\\.|:)\\d*\\]/g;
+    var timeRegExpArr = lyric.match(timeReg);
+    if (!timeRegExpArr) continue;
+    var clause = lyric.replace(timeReg, '');
+    for (var k = 0, h = timeRegExpArr.length; k < h; k++) {
+      var t = timeRegExpArr[k];
+      var min = Number(String(t.match(/\\[\\d*/i)).slice(1)),
+          sec = Number(String(t.match(/\\:\\d*/i)).slice(1));
+      var time = min * 60 + sec;
+      lrcObj[time] = clause;
+    }
+  }
+  return lrcObj;
+}
+
+
+// 显示当前歌词
+function showLrc(currentTime, lrcObj) {
+  var lrcDiv = document.getElementById('displayLrc');
+  for (var key in lrcObj) {
+    if (currentTime >= key) {
+      lrcDiv.innerText = lrcObj[key];
+    }
+  }
+}
+
+        
         $('#uploadBtn').click(function() {
             
             var formData = new FormData($('#fileUploadForm')[0]);
@@ -211,6 +252,15 @@ async def root():
                     $('#text').html(result['text']);
                     $('#srt').html(result['srt']);
                     $('#lrc').html(result['lrc']);
+                    $('#audioPlayer source').attr('src',window.location.origin+ result['file'])
+                    $('#audioPlayer')[0].load()
+                    var audio = document.getElementById('audioPlayer');
+                    var lrcTextarea = document.getElementById('lrc');
+                    var lrcObj = parseLrc(lrcTextarea.value);
+
+                    audio.ontimeupdate = function() {
+                    showLrc(this.currentTime, lrcObj);
+                    };
                 },
                 error: function(xhr, status, error) {
                 $('#message').html('Processing Error');
@@ -265,6 +315,7 @@ async def asr(file: List[UploadFile] = File(...)):
             srt=funasr_to_srt(result)
             result[0]['lrc']=srt2lrc(srt)
             result[0]['srt']=srt
+            result[0]['file']=temp_input_file_path
         except:
             print('srt convert fail')
 
@@ -275,7 +326,8 @@ async def asr(file: List[UploadFile] = File(...)):
         # 清理临时文件
         for temp_file in [temp_input_file_path]:
             if temp_file and os.path.exists(temp_file):  # 检查路径是否存在
-                os.remove(temp_file)  # 删除文件
+                pass
+                #os.remove(temp_file)  # 删除文件
 
 
 if __name__ == "__main__":
