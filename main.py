@@ -143,7 +143,7 @@ async def root():
     # upload form template
     return """
     <!doctype html>
-    <title>Upload Audio File</title>
+    <title>语音转文本</title>
     <h1>Upload Audio File</h1>
     <script
   src="https://code.jquery.com/jquery-3.7.1.js"
